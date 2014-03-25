@@ -1,5 +1,5 @@
-weather-station-receiver
-========================
+Meade Weather Station Server
+============================
 
 Receive data from a [Meade weather station](http://www.meade.com/product_pages/weatherstations/weathertime/te256w.php)
 sensor and expose it with a web interface with server-push updates using a websocket.

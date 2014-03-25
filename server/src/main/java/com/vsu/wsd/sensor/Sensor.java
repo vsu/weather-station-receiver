@@ -32,6 +32,10 @@ public class Sensor {
     public void close() {
         logger.info("close: " + portName);
 
+        synchronized(listeners) {
+            listeners.clear();
+        }
+
         if (reader != null) {
             reader.shutdown();
 
@@ -62,7 +66,7 @@ public class Sensor {
         sendSerial(id, Constants.REQ_SENSOR, String.format("%02x", (0xFF & channel)).toUpperCase(Locale.US));
     }
 
-    public int addListener(SerialListener listener) {
+    public synchronized int addListener(SerialListener listener) {
         // get the first unused id, which is a non-zero unsigned byte value
         Set<Integer> keys = listeners.keySet();
 
@@ -77,7 +81,7 @@ public class Sensor {
         return i;
     }
 
-    public void removeListener(int id) {
+    public synchronized void removeListener(int id) {
         if (listeners.containsKey(id)) {
             listeners.remove(id);
         }
@@ -143,44 +147,46 @@ public class Sensor {
                     builder.append(new String(buffer, 0, len));
                     if (builder.indexOf(Constants.CH_TERM) != -1)
                     {
-                        if (listeners.size() > 0) {
-                            String str = builder.toString();
-                            String response;
+                        synchronized(listeners) {
+                            if (listeners.size() > 0) {
+                                String str = builder.toString();
+                                String response;
 
-                            // if the string is not terminated, then save the incomplete fragment
-                            if (!str.endsWith(Constants.CH_TERM)) {
-                                int lastPos = str.lastIndexOf(Constants.CH_TERM);
+                                // if the string is not terminated, then save the incomplete fragment
+                                if (!str.endsWith(Constants.CH_TERM)) {
+                                    int lastPos = str.lastIndexOf(Constants.CH_TERM);
 
-                                if (lastPos != -1) {
-                                    String fragment = str.substring(lastPos);
-                                    response = str.substring(0, lastPos);
-                                    builder = new StringBuilder(fragment);
+                                    if (lastPos != -1) {
+                                        String fragment = str.substring(lastPos);
+                                        response = str.substring(0, lastPos);
+                                        builder = new StringBuilder(fragment);
+                                    } else {
+                                        response = str;
+                                        builder = new StringBuilder();
+                                    }
+
                                 } else {
                                     response = str;
                                     builder = new StringBuilder();
                                 }
 
-                            } else {
-                                response = str;
-                                builder = new StringBuilder();
-                            }
+                                String[] lines = response.split(Constants.CH_TERM);
+                                for (String line : lines) {
+                                    if (!line.isEmpty()) {
+                                        // examine the packet id to determine which listener to call
+                                        String idStr = line.substring(1, 3);
+                                        int id = Integer.parseInt(idStr, 16);
 
-                            String[] lines = response.split(Constants.CH_TERM);
-                            for (String line : lines) {
-                                if (!line.isEmpty()) {
-                                    // examine the packet id to determine which listener to call
-                                    String idStr = line.substring(1, 3);
-                                    int id = Integer.parseInt(idStr, 16);
-
-                                    // packet id 0 indicates broadcast
-                                    if (id == 0) {
-                                        for (SerialListener listener : listeners.values()) {
-                                            listener.onDataReceived(line);
+                                        // packet id 0 indicates broadcast
+                                        if (id == 0) {
+                                            for (SerialListener listener : listeners.values()) {
+                                                listener.onDataReceived(line);
+                                            }
+                                        } else {
+                                           if (listeners.containsKey(id)) {
+                                               listeners.get(id).onDataReceived(line);
+                                           }
                                         }
-                                    } else {
-                                       if (listeners.containsKey(id)) {
-                                           listeners.get(id).onDataReceived(line);
-                                       }
                                     }
                                 }
                             }
