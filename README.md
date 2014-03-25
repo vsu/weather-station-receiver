@@ -22,4 +22,4 @@ to ```/etc/init.d``` and set to start with stop with the system using ```update-
 is provided to force restart of the server in case it starts before networking is available.  The ```if.d``` 
 script should be copied to ```/etc/network/if-up.d```.
 
-Note that this project depends on shared code in the ```jvm-common``` repository which needs to be built first.
+Note that this project depends on shared code in the ```common``` repository which needs to be built first.
