@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <string name="app_name">Weather Station</string>
+    <string name="action_settings">Settings</string>
+    <string name="label_temperature">Temperature</string>
+    <string name="label_humidity">Humidity</string>
+    
+    <string name="pref_server_address">Server Address</string>
+    <string name="pref_server_address_summary">Host address of server</string>
+    <string name="pref_scan_server">Scan for Server</string>
+    <string name="pref_scan_server_summary">Click to scan for server</string>
+    <string name="pref_temp_unit">Temperature Unit</string>
+    <string name="pref_temp_unit_summary">Set display unit for temperature</string>
+    <string name="pref_header_network">Network</string>
+    <string name="pref_header_display">Display</string>
+   
+    <string name="status_no_server_address">No server address set.  Please specify in settings.</string>
+    <string name="status_server_connected">Connected to server</string>
+    <string name="status_connection_failed">Could not connect to server.  Please check address in settings.</string>
+    <string name="status_scanning">Scanning&#8230;</string>
+    <string name="status_cannot_find_server">Could not find server.  Please set address manually.</string>
+    <string name="status_found_server">Found server at&#160;</string>
+    <string name="status_no_network">There is no network connection.  Please check system settings.</string>
+
+</resources>

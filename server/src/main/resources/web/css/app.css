@@ -1,0 +1,15 @@
+body {
+    padding-top: 80px;
+    padding-bottom: 20px;
+    background: #ffffff;
+}
+
+.btn-sensor {
+    margin-left: 10px;
+}
+
+.value-display {
+    margin: 0;
+    display: inline-block;
+    width: 50px;
+}

@@ -1,0 +1,5 @@
+host:
+port: 80
+threadPoolWorker: 16
+threadPoolBoss: 1
+portName: /dev/ttyACM0

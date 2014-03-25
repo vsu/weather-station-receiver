@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<PreferenceScreen
+        xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <PreferenceCategory
+        android:title="@string/pref_header_network">            
+
+        <EditTextPreference
+                android:key="pref_server_address"
+                android:title="@string/pref_server_address"
+                android:summary="@string/pref_server_address_summary"
+                android:dialogTitle="@string/pref_server_address"
+                android:defaultValue="" />
+        
+        <Preference 
+                android:key="pref_scan_server"
+                android:title="@string/pref_scan_server"
+                android:summary="@string/pref_scan_server_summary" />
+    </PreferenceCategory>
+
+    <PreferenceCategory
+        android:title="@string/pref_header_display">            
+
+        <ListPreference
+                android:key="pref_temp_unit"
+                android:title="@string/pref_temp_unit"
+                android:summary="@string/pref_temp_unit_summary"
+                android:entries="@array/temperature_unit"
+                android:entryValues="@array/temperature_unit_values"
+                android:defaultValue="F" />        
+        
+    </PreferenceCategory>
+    
+</PreferenceScreen>
