@@ -11,9 +11,10 @@ A PIC microcontroller decodes the Manchester-coded RF bit stream and sends it to
 (or a linux PC) over USB. The PIC microcontroller also provides 5 ADC inputs for analog sensors that can be 
 polled from the server.  The schematic is provided in KiCad format.
 
-The format Meade sensor bitstream has been reverse-engineered, although there are portions of the data
-that are unknown. I am not familiar with the encoding scheme, but after taking enough samples I was
-able to make enough sense out of it to extract the temperature and humidity values.
+I reverse-engineered the Meade sensor bitstream format, but have not been able to identify the purpose 
+of some parts of the data.  They are likely checksums, but without knowing the exact encoding or checksum
+algorithm it is difficult to know for certain. After taking enough samples, I was able to identify a 
+pattern so as to extract the temperature and humidity values.
 
 The server is built using [netty](http://netty.io/) and configured to run as an [Apache commons daemon]
 (http://commons.apache.org/proper/commons-daemon/jsvc.html).  You will need to install jsvc from your linux 
