@@ -12,6 +12,7 @@ public class Constants {
     public final static String KEY_RESULT = "result";
     public final static String KEY_TYPE = "type";
 
+    public final static String TYPE_HISTORY = "history";
     public final static String TYPE_HUMIDITY = "humidity";
     public final static String TYPE_SENSOR0 = "sensor0";
     public final static String TYPE_SENSOR1 = "sensor1";

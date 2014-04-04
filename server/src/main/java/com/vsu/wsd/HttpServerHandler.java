@@ -1,5 +1,7 @@
 package com.vsu.wsd;
 
+import com.google.common.base.Predicate;
+import com.google.common.collect.Maps;
 import com.vsu.common.net.http.HttpUtil;
 import com.vsu.common.net.http.StaticFileHandler;
 import com.vsu.wsd.sensor.RfParser;
@@ -20,6 +22,7 @@ import io.netty.handler.codec.http.websocketx.TextWebSocketFrame;
 import io.netty.handler.codec.http.websocketx.WebSocketFrame;
 import io.netty.handler.codec.http.websocketx.WebSocketServerHandshaker;
 import io.netty.handler.codec.http.websocketx.WebSocketServerHandshakerFactory;
+import org.codehaus.jettison.json.JSONArray;
 import org.codehaus.jettison.json.JSONException;
 import org.codehaus.jettison.json.JSONObject;
 import org.slf4j.Logger;
@@ -29,8 +32,10 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.SortedMap;
 
 import static io.netty.handler.codec.http.HttpHeaders.Names.HOST;
 import static io.netty.handler.codec.http.HttpResponseStatus.BAD_REQUEST;
@@ -56,6 +61,8 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<Object> {
 
     private static List<Integer> temperatureSamples = new ArrayList<Integer>();
     private static List<Integer> humiditySamples = new ArrayList<Integer>();
+
+    private static Map<Long, Integer[]> sensorHistory = new HashMap<Long, Integer[]>();
 
     public HttpServerHandler(final Settings settings) {
         this.settings = settings;
@@ -138,36 +145,72 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<Object> {
                     Map<String, Object> data = new HashMap<String, Object>();
 
                     if (op.equals(Constants.OP_QUERY)) {
-                        String field = requestJson.getString(Constants.KEY_TYPE);
+                        if (requestJson.has(Constants.KEY_TYPE)) {
+                            String field = requestJson.getString(Constants.KEY_TYPE);
 
-                        if (field.equals(Constants.TYPE_TEMPERATURE) || field.equals(Constants.TYPE_HUMIDITY)) {
-                            context = ctx;
-                            sensor.getRFData(listenerId);
-                        }
+                            if (field.equals(Constants.TYPE_TEMPERATURE) || field.equals(Constants.TYPE_HUMIDITY)) {
+                                context = ctx;
+                                sensor.getRFData(listenerId);
+                            }
 
-                        if (field.equals(Constants.TYPE_SENSOR0)) {
-                            context = ctx;
-                            sensor.getSensorData(listenerId, 0);
-                        }
+                            if (field.equals(Constants.TYPE_SENSOR0)) {
+                                context = ctx;
+                                sensor.getSensorData(listenerId, 0);
+                            }
 
-                        if (field.equals(Constants.TYPE_SENSOR1)) {
-                            context = ctx;
-                            sensor.getSensorData(listenerId, 1);
-                        }
+                            if (field.equals(Constants.TYPE_SENSOR1)) {
+                                context = ctx;
+                                sensor.getSensorData(listenerId, 1);
+                            }
 
-                        if (field.equals(Constants.TYPE_SENSOR2)) {
-                            context = ctx;
-                            sensor.getSensorData(listenerId, 2);
-                        }
+                            if (field.equals(Constants.TYPE_SENSOR2)) {
+                                context = ctx;
+                                sensor.getSensorData(listenerId, 2);
+                            }
 
-                        if (field.equals(Constants.TYPE_SENSOR3)) {
-                            context = ctx;
-                            sensor.getSensorData(listenerId, 3);
-                        }
+                            if (field.equals(Constants.TYPE_SENSOR3)) {
+                                context = ctx;
+                                sensor.getSensorData(listenerId, 3);
+                            }
 
-                        if (field.equals(Constants.TYPE_SENSOR4)) {
-                            context = ctx;
-                            sensor.getSensorData(listenerId, 4);
+                            if (field.equals(Constants.TYPE_SENSOR4)) {
+                                context = ctx;
+                                sensor.getSensorData(listenerId, 4);
+                            }
+
+                            if (field.equals(Constants.TYPE_HISTORY)) {
+                                try {
+                                    JSONObject json = new JSONObject();
+
+                                    JSONArray array = new JSONArray();
+
+                                    Iterator it = sensorHistory.entrySet().iterator();
+                                    while (it.hasNext()) {
+                                        JSONObject item = new JSONObject();
+
+                                        Map.Entry pairs = (Map.Entry) it.next();
+
+                                        item.put(Constants.KEY_DATETIME, pairs.getKey());
+                                        item.put(Constants.TYPE_TEMPERATURE, ((Integer[]) pairs.getValue())[0]);
+                                        item.put(Constants.TYPE_HUMIDITY, ((Integer[]) pairs.getValue())[1]);
+
+                                        array.put(item);
+                                    }
+
+                                    json.put(Constants.KEY_RESULT, Constants.RESULT_OK);
+                                    json.put(Constants.TYPE_HISTORY, array);
+
+                                    ctx.channel().writeAndFlush(new TextWebSocketFrame(json.toString()));
+
+                                } catch (JSONException e) {
+
+                                }
+                            }
+                        } else {
+                            data.put(Constants.KEY_RESULT, Constants.RESULT_ERROR);
+                            data.put(Constants.KEY_MESSAGE, "No type");
+
+                            sendJsonResponse(ctx, data);
                         }
 
                     } else if (op.equals(Constants.OP_RESET)) {
@@ -334,12 +377,27 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<Object> {
                     }
 
                     if (!map.isEmpty()) {
+                        long timeStamp = System.currentTimeMillis();
+
                         map.put(Constants.KEY_RESULT, Constants.RESULT_OK);
-                        map.put(Constants.KEY_DATETIME, System.currentTimeMillis());
+                        map.put(Constants.KEY_DATETIME, timeStamp);
 
                         if (context != null) {
                             sendJsonResponse(context, map);
                         }
+
+                        sensorHistory.put(timeStamp, new Integer[] { validatedTemperature, validatedHumidity });
+
+                        // remove history older than one day
+                        final long oneDayAgo = timeStamp - 86400000;
+
+                        Predicate<Long> dayFilter = new Predicate<Long>() {
+                            public boolean apply(Long timeStamp) {
+                                return (timeStamp >= oneDayAgo);
+                            }
+                        };
+
+                        sensorHistory = Maps.filterKeys(sensorHistory, dayFilter);
                     }
                 }
 
