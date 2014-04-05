@@ -271,6 +271,7 @@ $(document).ready(function () {
         _sendQuery(TYPE.sensor2);
         _sendQuery(TYPE.sensor3);
         _sendQuery(TYPE.sensor4);
+        _sendQuery(TYPE.history);
     });
 
     $(".btn-sensor").on("click", function () {
@@ -286,6 +287,4 @@ $(document).ready(function () {
             _socket.push(JSON.stringify(data));
         }
     });
-
-    _renderChart();
-})
+});
