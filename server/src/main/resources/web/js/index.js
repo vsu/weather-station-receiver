@@ -40,112 +40,6 @@ function _sendQuery(type) {
     _socket.push(JSON.stringify(data));
 }
 
-/*
-function _connectWebSocket(onOpen) {
-    var pageUri = new URI(window.location.href);
-    var hostname = pageUri.hostname();
-    var port = pageUri.port();
-    var socketUri = "ws://" + hostname + (port != "" ? ":" + port : "") + WS_PATH;
-
-    var request = {
-        url: socketUri,
-        contentType : "application/json",
-        transport : "websocket"
-    };
-
-    request.onOpen = function(response) {
-        if (!_.isUndefined(onOpen)) {
-            onOpen();
-        }
-    };
-
-    request.onMessage = function (response) {
-        if (response.status == 200) {
-            var body = response.responseBody.split("|");
-
-            if (body.length == 2) {
-                var data = JSON.parse(body[1]);
-
-                // ignore if the query request is echoed back
-                if (_(data).has(KEY.op)) {
-                    return;
-                }
-
-                if (_(data).has(KEY.result) && (data.result == RESULT.ok)) {
-                    if (_(data).has(KEY.dateTime)) {
-                        var date = moment(data[KEY.dateTime]);
-                        var html = "Last updated:&nbsp;" + date.format("llll");
-                        $("#spanDateTime").html(html);
-                    }
-
-                    if (_(data).has(TYPE.temperature)) {
-                        if (data[TYPE.temperature] != -1) {
-                            var temperature = data[TYPE.temperature];
-                            var tempCelsius = temperature / 10;
-                            var tempFahrenheit = Math.round(10 * ((temperature * 0.18) + 32)) / 10;
-                            var html = tempFahrenheit + "&nbsp;&deg;F&nbsp;(" + tempCelsius + "&nbsp;&deg;C)";
-
-                            $("#spanTemperature").html(html);
-                        }
-                        else {
-                            $("#spanTemperature").html("");
-                        }
-                    }
-
-                    if (_(data).has(TYPE.humidity)) {
-                        if (data[TYPE.humidity] != -1) {
-                            $("#spanHumidity").html(data[TYPE.humidity] + "%");
-                        }
-                        else {
-                            $("#spanHumidity").html("");
-                        }
-                    }
-
-                    if (_(data).has(TYPE.sensor0)) {
-                        $("#spanSensor0").text((data[TYPE.sensor0] != -1) ? data[TYPE.sensor0] : "");
-                    }
-
-                    if (_(data).has(TYPE.sensor1)) {
-                        $("#spanSensor1").text((data[TYPE.sensor1] != -1) ? data[TYPE.sensor1] : "");
-                    }
-
-                    if (_(data).has(TYPE.sensor2)) {
-                        $("#spanSensor2").text((data[TYPE.sensor2] != -1) ? data[TYPE.sensor2] : "");
-                    }
-
-                    if (_(data).has(TYPE.sensor3)) {
-                        $("#spanSensor3").text((data[TYPE.sensor3] != -1) ? data[TYPE.sensor3] : "");
-                    }
-
-                    if (_(data).has(TYPE.sensor4)) {
-                        $("#spanSensor4").text((data[TYPE.sensor4] != -1) ? data[TYPE.sensor4] : "");
-                    }
-
-                    return;
-                }
-            }
-        }
-
-        $("#spanTemperature").text("");
-        $("#spanHumidity").text("");
-        $("#spanSensor0").text("");
-        $("#spanSensor1").text("");
-        $("#spanSensor2").text("");
-        $("#spanSensor3").text("");
-        $("#spanSensor4").text("");
-    };
-
-    request.onClose = function(response) {
-    }
-
-    request.onError = function(response) {
-        alert("Unable to connect to the web server.");
-    };
-
-    _socket = atmosphere.subscribe(request);
-}
-*/
-
 function _getTempC(temperature) {
     return temperature / 10;
 }
@@ -154,45 +48,71 @@ function _getTempF(temperature) {
     return Math.round(10 * ((temperature * 0.18) + 32)) / 10;
 }
 
+function _readShortBE(data, offset) {
+    return data[offset] * 256 + data[offset + 1];
+}
+
+function _readIntBE(data, offset) {
+    return data[offset] * 16777216 +
+        data[offset + 1] * 65536 +
+        data[offset + 2] * 256 +
+        data[offset + 3];
+}
+
+function _readLongBE(data, offset) {
+    var high = _readIntBE(data, offset);
+    var low = _readIntBE(data, offset + 4);
+    return (high * 4294967296) + low;
+}
+
 function _renderChart() {
-    nv.addGraph(function() {
-        var chart = nv.models.lineChart()
-            .useInteractiveGuideline(true)
-            .transitionDuration(350)
-            .showLegend(true)
-            .showYAxis(true)
-            .showXAxis(true);
+   if (_historyData.length > 0) {
+        $("#chart").show();
+        $("#noChartData").hide();
 
-        chart.xAxis.tickFormat(function(d) { return d3.time.format("%X") (new Date(d)); });
+        nv.addGraph(function() {
+            var chart = nv.models.lineChart()
+                .useInteractiveGuideline(true)
+                .transitionDuration(350)
+                .showLegend(true)
+                .showYAxis(true)
+                .showXAxis(true);
 
-        var temperature = _.chain(_historyData)
-            .map(function (item) {
-                var dateTime = moment(parseInt(item.dateTime));
-                return { x: dateTime.toDate(), y: _getTempF(parseInt(item.temperature)) };
-            })
-            .sortBy(function (item) { return item.x.getTime(); })
-            .value();
+            chart.xAxis.tickFormat(function(d) { return d3.time.format("%X") (new Date(d)); });
 
-        var humidity = _.chain(_historyData)
-            .map(function (item) {
-                var dateTime = moment(parseInt(item.dateTime));
-                return { x: dateTime.toDate(), y: (parseInt(item.humidity)) };
-            })
-            .sortBy(function (item) { return item.x.getTime(); })
-            .value();
+            var temperature = _.chain(_historyData)
+                .map(function (item) {
+                    var dateTime = moment(item.dateTime);
+                    return { x: dateTime.toDate(), y: _getTempF(item.temperature) };
+                })
+                .sortBy(function (item) { return item.x.getTime(); })
+                .value();
 
-        var dataSet = [];
-        dataSet.push({ key: "Temperature °F", values: temperature});
-        dataSet.push({ key: "Humidity %", values: humidity});
+            var humidity = _.chain(_historyData)
+                .map(function (item) {
+                    var dateTime = moment(item.dateTime);
+                    return { x: dateTime.toDate(), y: (item.humidity) };
+                })
+                .sortBy(function (item) { return item.x.getTime(); })
+                .value();
 
-        var svg = d3.select("#chart svg")
-            .datum(dataSet)
-            .call(chart);
+            var dataSet = [];
+            dataSet.push({ key: "Temperature °F", values: temperature});
+            dataSet.push({ key: "Humidity %", values: humidity});
 
-        nv.utils.windowResize(function() { chart.update() });
+            var svg = d3.select("#chart svg")
+                .datum(dataSet)
+                .call(chart);
 
-        return chart;
-    });
+            nv.utils.windowResize(function() { chart.update() });
+
+            return chart;
+        });
+    }
+    else {
+        $("#chart").hide();
+        $("#noChartData").show();
+    }
 }
 
 function _sendQuery(type) {
@@ -240,68 +160,100 @@ function _connectWebSocket(onOpen) {
     _socket.onmessage = function (evt) {
         if (!_.isUndefined(evt.data) && evt.data != null) {
 
-            var data = JSON.parse(evt.data);
+            // determine the message type
+            if (evt.data instanceof Blob) {
+                // convert the blob into a uint8 array
+                var fileReader = new FileReader();
 
-            if (_(data).has(KEY.result) && (data.result == RESULT.ok)) {
-                if (_(data).has(KEY.dateTime)) {
-                    var date = moment(data[KEY.dateTime]);
-                    var html = "Last updated:&nbsp;" + date.format("llll");
-                    $("#spanDateTime").html(html);
-                }
+                fileReader.onload = function(e) {
+                    _historyData = [];
 
-                if (_(data).has(TYPE.temperature)) {
-                    if (data[TYPE.temperature] != -1) {
-                        var temperature = data[TYPE.temperature];
-                        var tempCelsius = _getTempC(temperature);
-                        var tempFahrenheit = _getTempF(temperature);
-                        var html = tempFahrenheit + "&nbsp;&deg;F&nbsp;(" + tempCelsius + "&nbsp;&deg;C)";
+                    var data = new Uint8Array(this.result);
 
-                        $("#spanTemperature").html(html);
+                    // each sample is 11 bytes, so the length must be divisible by that
+                    if (data.length % 11 == 0) {
+                        for (var ix = 0; ix < data.length; ix = ix + 11) {
+                            var item = {};
+
+                            item[KEY.dateTime] = _readLongBE(data, ix);
+                            item[TYPE.temperature] = _readShortBE(data, ix + 8);
+                            item[TYPE.humidity] = data[ix + 10];
+
+                            _historyData.push(item);
+                        }
+
+                        _renderChart();
                     }
-                    else {
-                        $("#spanTemperature").html("");
+                };
+
+                fileReader.readAsArrayBuffer(evt.data);
+
+            }
+            else if (typeof evt.data === "string") {
+                var data = JSON.parse(evt.data);
+
+                if (_(data).has(KEY.result) && (data.result == RESULT.ok)) {
+                    if (_(data).has(KEY.dateTime)) {
+                        var date = moment(data[KEY.dateTime]);
+                        var html = "Last updated:&nbsp;" + date.format("llll");
+                        $("#spanDateTime").html(html);
                     }
-                }
 
-                if (_(data).has(TYPE.humidity)) {
-                    if (data[TYPE.humidity] != -1) {
-                        $("#spanHumidity").html(data[TYPE.humidity] + "%");
+                    if (_(data).has(TYPE.temperature)) {
+                        if (data[TYPE.temperature] != -1) {
+                            var temperature = data[TYPE.temperature];
+                            var tempCelsius = _getTempC(temperature);
+                            var tempFahrenheit = _getTempF(temperature);
+                            var html = tempFahrenheit + "&nbsp;&deg;F&nbsp;(" + tempCelsius + "&nbsp;&deg;C)";
+
+                            $("#spanTemperature").html(html);
+                        }
+                        else {
+                            $("#spanTemperature").html("");
+                        }
                     }
-                    else {
-                        $("#spanHumidity").html("");
+
+                    if (_(data).has(TYPE.humidity)) {
+                        if (data[TYPE.humidity] != -1) {
+                            $("#spanHumidity").html(data[TYPE.humidity] + "%");
+                        }
+                        else {
+                            $("#spanHumidity").html("");
+                        }
                     }
-                }
 
-                if (_(data).has(KEY.dateTime) &&
-                    _(data).has(TYPE.temperature) &&
-                    _(data).has(TYPE.humidity)) {
-                    _historyData.push(data);
-                    _renderChart();
-                }
+                    if (_(data).has(KEY.dateTime) &&
+                        _(data).has(TYPE.temperature) &&
+                        _(data).has(TYPE.humidity)) {
 
-                if (_(data).has(TYPE.sensor0)) {
-                    $("#spanSensor0").text(data[TYPE.sensor0]);
-                }
+                        var item = {};
+                        item[KEY.dateTime] = parseInt(data[KEY.dateTime]);
+                        item[TYPE.temperature] = parseInt(data[TYPE.temperature]);
+                        item[TYPE.humidity] = parseInt(data[TYPE.humidity]);
 
-                if (_(data).has(TYPE.sensor1)) {
-                    $("#spanSensor1").text(data[TYPE.sensor1]);
-                }
+                        _historyData.push(item);
+                        _renderChart();
+                    }
 
-                if (_(data).has(TYPE.sensor2)) {
-                    $("#spanSensor2").text(data[TYPE.sensor2]);
-                }
+                    if (_(data).has(TYPE.sensor0)) {
+                        $("#spanSensor0").text(data[TYPE.sensor0]);
+                    }
 
-                if (_(data).has(TYPE.sensor3)) {
-                    $("#spanSensor3").text(data[TYPE.sensor3]);
-                }
+                    if (_(data).has(TYPE.sensor1)) {
+                        $("#spanSensor1").text(data[TYPE.sensor1]);
+                    }
 
-                if (_(data).has(TYPE.sensor4)) {
-                    $("#spanSensor4").text(data[TYPE.sensor4]);
-                }
+                    if (_(data).has(TYPE.sensor2)) {
+                        $("#spanSensor2").text(data[TYPE.sensor2]);
+                    }
 
-                if (_(data).has(TYPE.history)) {
-                    _historyData = data[TYPE.history];
-                    _renderChart();
+                    if (_(data).has(TYPE.sensor3)) {
+                        $("#spanSensor3").text(data[TYPE.sensor3]);
+                    }
+
+                    if (_(data).has(TYPE.sensor4)) {
+                        $("#spanSensor4").text(data[TYPE.sensor4]);
+                    }
                 }
 
                 return;
@@ -319,16 +271,11 @@ $(document).ready(function () {
         _sendQuery(TYPE.sensor2);
         _sendQuery(TYPE.sensor3);
         _sendQuery(TYPE.sensor4);
-        _sendQuery(TYPE.history);
     });
 
     $(".btn-sensor").on("click", function () {
         var type = $(this).attr("sensorType");
         _sendQuery(type);
-
-        if (type == "temperature") {
-            _sendQuery(TYPE.history);
-        }
     });
 
     $("#btnReset").on("click", function () {
@@ -339,4 +286,6 @@ $(document).ready(function () {
             _socket.push(JSON.stringify(data));
         }
     });
+
+    _renderChart();
 })

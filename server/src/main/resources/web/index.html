@@ -118,7 +118,7 @@
                             <h4>Administration</h4>
                         </div>
                         <div class="col-xs-8 col-md-6">
-                            <button id="btnReset" class="btn btn-default btn-xs" style="margin-top: 10px" title="Reset Sensor"><span class="glyphicon-nav glyphicon glyphicon-flash"></span> Reset Sensor</button>
+                            <button id="btnReset" class="btn btn-default btn-xs" style="margin-top: 8px" title="Reset Sensor"><span class="glyphicon-nav glyphicon glyphicon-flash"></span> Reset Sensor</button>
                         </div>
                         <div class="col-xs-4 col-md-2">
                         </div>
@@ -127,8 +127,10 @@
             </div>
         </div>
         <div class="col-xs-12 col-md-6">
+            <button sensorType="history" class="btn-sensor btn btn-default btn-xs pull-right" style="margin: 10px" title="Refresh"><span class="glyphicon-nav glyphicon glyphicon-refresh"></span></button>
             <div class="panel panel-default">
                 <div class="panel-body">
+                    <div id="noChartData" style="display: none">No data available. Click refresh to reload.</div>
                     <div id="chart" style="height: 442px">
                         <svg></svg>
                     </div>
@@ -143,7 +145,6 @@
 </div>
 <script src="//code.jquery.com/jquery-1.10.2.min.js"></script>
 <script src="//netdna.bootstrapcdn.com/bootstrap/3.1.1/js/bootstrap.min.js"></script>
-<script src="js/atmosphere.js"></script>
 <script src="js/underscore.min.js"></script>
 <script src="js/URI.min.js"></script>
 <script src="js/moment.min.js"></script>

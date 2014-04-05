@@ -1,7 +1,8 @@
 package com.vsu.wsd;
 
 import com.google.common.base.Predicate;
-import com.google.common.collect.Maps;
+import com.google.common.collect.Iterables;
+import com.google.common.collect.Lists;
 import com.vsu.common.net.http.HttpUtil;
 import com.vsu.common.net.http.StaticFileHandler;
 import com.vsu.wsd.sensor.RfParser;
@@ -10,19 +11,14 @@ import com.vsu.wsd.sensor.Constants;
 import com.vsu.wsd.sensor.Sensor;
 import com.vsu.wsd.sensor.SensorFactory;
 import com.vsu.wsd.sensor.SerialListener;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.http.DefaultFullHttpResponse;
 import io.netty.handler.codec.http.FullHttpRequest;
 
-import io.netty.handler.codec.http.websocketx.CloseWebSocketFrame;
-import io.netty.handler.codec.http.websocketx.PingWebSocketFrame;
-import io.netty.handler.codec.http.websocketx.PongWebSocketFrame;
-import io.netty.handler.codec.http.websocketx.TextWebSocketFrame;
-import io.netty.handler.codec.http.websocketx.WebSocketFrame;
-import io.netty.handler.codec.http.websocketx.WebSocketServerHandshaker;
-import io.netty.handler.codec.http.websocketx.WebSocketServerHandshakerFactory;
-import org.codehaus.jettison.json.JSONArray;
+import io.netty.handler.codec.http.websocketx.*;
 import org.codehaus.jettison.json.JSONException;
 import org.codehaus.jettison.json.JSONObject;
 import org.slf4j.Logger;
@@ -62,7 +58,7 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<Object> {
     private static List<Integer> temperatureSamples = new ArrayList<Integer>();
     private static List<Integer> humiditySamples = new ArrayList<Integer>();
 
-    private static Map<Long, Integer[]> sensorHistory = new HashMap<Long, Integer[]>();
+    private static List<HistoryItem> sensorHistory = new ArrayList<HistoryItem>();
 
     public HttpServerHandler(final Settings settings) {
         this.settings = settings;
@@ -179,33 +175,19 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<Object> {
                             }
 
                             if (field.equals(Constants.TYPE_HISTORY)) {
-                                try {
-                                    JSONObject json = new JSONObject();
+                                final ByteBuf dataBytes = Unpooled.directBuffer(
+                                        sensorHistory.size() * ((Long.SIZE + Short.SIZE + Byte.SIZE) / Byte.SIZE));
 
-                                    JSONArray array = new JSONArray();
-
-                                    Iterator it = sensorHistory.entrySet().iterator();
-                                    while (it.hasNext()) {
-                                        JSONObject item = new JSONObject();
-
-                                        Map.Entry pairs = (Map.Entry) it.next();
-
-                                        item.put(Constants.KEY_DATETIME, pairs.getKey());
-                                        item.put(Constants.TYPE_TEMPERATURE, ((Integer[]) pairs.getValue())[0]);
-                                        item.put(Constants.TYPE_HUMIDITY, ((Integer[]) pairs.getValue())[1]);
-
-                                        array.put(item);
-                                    }
-
-                                    json.put(Constants.KEY_RESULT, Constants.RESULT_OK);
-                                    json.put(Constants.TYPE_HISTORY, array);
-
-                                    ctx.channel().writeAndFlush(new TextWebSocketFrame(json.toString()));
-
-                                } catch (JSONException e) {
-
+                                // byte order is big-endian
+                                for (HistoryItem item : sensorHistory) {
+                                    dataBytes.writeLong(item.getDateTime());
+                                    dataBytes.writeShort(item.getTemperature());
+                                    dataBytes.writeByte(item.getHumidity());
                                 }
+
+                                ctx.channel().write(new BinaryWebSocketFrame(dataBytes));
                             }
+
                         } else {
                             data.put(Constants.KEY_RESULT, Constants.RESULT_ERROR);
                             data.put(Constants.KEY_MESSAGE, "No type");
@@ -298,6 +280,30 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<Object> {
         return val;
     }
 
+    private class HistoryItem {
+        private long dateTime;
+        private short temperature;
+        private byte humidity;
+
+        public HistoryItem(long dateTime, short temperature, byte humidity) {
+            this.dateTime = dateTime;
+            this.temperature = temperature;
+            this.humidity = humidity;
+        }
+
+        public long getDateTime() {
+            return dateTime;
+        }
+
+        public short getTemperature() {
+            return temperature;
+        }
+
+        public byte getHumidity() {
+            return humidity;
+        }
+    }
+
     private class WsSerialListener implements SerialListener {
         public void onDataReceived(String data) {
 
@@ -386,18 +392,18 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<Object> {
                             sendJsonResponse(context, map);
                         }
 
-                        sensorHistory.put(timeStamp, new Integer[] { validatedTemperature, validatedHumidity });
+                        sensorHistory.add(new HistoryItem(timeStamp, (short) validatedTemperature, (byte) validatedHumidity));
 
                         // remove history older than one day
                         final long oneDayAgo = timeStamp - 86400000;
 
-                        Predicate<Long> dayFilter = new Predicate<Long>() {
-                            public boolean apply(Long timeStamp) {
-                                return (timeStamp >= oneDayAgo);
+                        Predicate<HistoryItem> dayFilter = new Predicate<HistoryItem>() {
+                            public boolean apply(HistoryItem item) {
+                                return (item.getDateTime() >= oneDayAgo);
                             }
                         };
 
-                        sensorHistory = Maps.filterKeys(sensorHistory, dayFilter);
+                        sensorHistory = Lists.newArrayList(Iterables.filter(sensorHistory, dayFilter));
                     }
                 }
 
