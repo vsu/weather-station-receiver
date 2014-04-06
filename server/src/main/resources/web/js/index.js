@@ -20,11 +20,11 @@ var KEY = {
 var TYPE = {
     history: "history",
     humidity: "humidity",
-    sensor0: "sensor0",
-    sensor1: "sensor1",
-    sensor2: "sensor2",
-    sensor3: "sensor3",
-    sensor4: "sensor4",
+    channel0: "channel0",
+    channel1: "channel1",
+    channel2: "channel2",
+    channel3: "channel3",
+    channel4: "channel4",
     temperature: "temperature"
 };
 
@@ -80,20 +80,16 @@ function _renderChart() {
 
             chart.xAxis.tickFormat(function(d) { return d3.time.format("%X") (new Date(d)); });
 
-            var temperature = _.chain(_historyData)
-                .map(function (item) {
-                    var dateTime = moment(item.dateTime);
-                    return { x: dateTime.toDate(), y: _getTempF(item.temperature) };
-                })
-                .sortBy(function (item) { return item.x.getTime(); })
-                .value();
+            var temperature = [];
+            var humidity = [];
 
-            var humidity = _.chain(_historyData)
-                .map(function (item) {
-                    var dateTime = moment(item.dateTime);
-                    return { x: dateTime.toDate(), y: (item.humidity) };
+            _.chain(_historyData)
+                .sortBy(item[0])
+                .each(function (item) {
+                    var dateTime = moment(item[0]);
+                    temperature.push({ x: dateTime.toDate(), y: _getTempF(item[1])});
+                    humidity.push({ x: dateTime.toDate(), y: item[2]})
                 })
-                .sortBy(function (item) { return item.x.getTime(); })
                 .value();
 
             var dataSet = [];
@@ -173,11 +169,11 @@ function _connectWebSocket(onOpen) {
                     // each sample is 11 bytes, so the length must be divisible by that
                     if (data.length % 11 == 0) {
                         for (var ix = 0; ix < data.length; ix = ix + 11) {
-                            var item = {};
+                            var item = [];
 
-                            item[KEY.dateTime] = _readLongBE(data, ix);
-                            item[TYPE.temperature] = _readShortBE(data, ix + 8);
-                            item[TYPE.humidity] = data[ix + 10];
+                            item.push(_readLongBE(data, ix));
+                            item.push(_readShortBE(data, ix + 8));
+                            item.push(data[ix + 10]);
 
                             _historyData.push(item);
                         }
@@ -226,33 +222,33 @@ function _connectWebSocket(onOpen) {
                         _(data).has(TYPE.temperature) &&
                         _(data).has(TYPE.humidity)) {
 
-                        var item = {};
-                        item[KEY.dateTime] = parseInt(data[KEY.dateTime]);
-                        item[TYPE.temperature] = parseInt(data[TYPE.temperature]);
-                        item[TYPE.humidity] = parseInt(data[TYPE.humidity]);
+                        var item = [];
+                        item.push(parseInt(data[KEY.dateTime]));
+                        item.push(parseInt(data[TYPE.temperature]));
+                        item.push(parseInt(data[TYPE.humidity]));
 
                         _historyData.push(item);
                         _renderChart();
                     }
 
-                    if (_(data).has(TYPE.sensor0)) {
-                        $("#spanSensor0").text(data[TYPE.sensor0]);
+                    if (_(data).has(TYPE.channel0)) {
+                        $("#spanChannel0").text(data[TYPE.channel0]);
                     }
 
-                    if (_(data).has(TYPE.sensor1)) {
-                        $("#spanSensor1").text(data[TYPE.sensor1]);
+                    if (_(data).has(TYPE.channel1)) {
+                        $("#spanChannel1").text(data[TYPE.channel1]);
                     }
 
-                    if (_(data).has(TYPE.sensor2)) {
-                        $("#spanSensor2").text(data[TYPE.sensor2]);
+                    if (_(data).has(TYPE.channel2)) {
+                        $("#spanChannel2").text(data[TYPE.channel2]);
                     }
 
-                    if (_(data).has(TYPE.sensor3)) {
-                        $("#spanSensor3").text(data[TYPE.sensor3]);
+                    if (_(data).has(TYPE.channel3)) {
+                        $("#spanChannel3").text(data[TYPE.channel3]);
                     }
 
-                    if (_(data).has(TYPE.sensor4)) {
-                        $("#spanSensor4").text(data[TYPE.sensor4]);
+                    if (_(data).has(TYPE.channel4)) {
+                        $("#spanChannel4").text(data[TYPE.channel4]);
                     }
                 }
 
@@ -266,11 +262,11 @@ function _connectWebSocket(onOpen) {
 $(document).ready(function () {
     _connectWebSocket(function () {
         _sendQuery(TYPE.temperature);
-        _sendQuery(TYPE.sensor0);
-        _sendQuery(TYPE.sensor1);
-        _sendQuery(TYPE.sensor2);
-        _sendQuery(TYPE.sensor3);
-        _sendQuery(TYPE.sensor4);
+        _sendQuery(TYPE.channel0);
+        _sendQuery(TYPE.channel1);
+        _sendQuery(TYPE.channel2);
+        _sendQuery(TYPE.channel3);
+        _sendQuery(TYPE.channel4);
         _sendQuery(TYPE.history);
     });
 

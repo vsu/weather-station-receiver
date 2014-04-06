@@ -1,16 +1,12 @@
 package com.vsu.wsd;
 
-import com.google.common.base.Predicate;
-import com.google.common.collect.Iterables;
-import com.google.common.collect.Lists;
 import com.vsu.common.net.http.HttpUtil;
 import com.vsu.common.net.http.StaticFileHandler;
-import com.vsu.wsd.sensor.RfParser;
-import com.vsu.wsd.sensor.RfData;
 import com.vsu.wsd.sensor.Constants;
 import com.vsu.wsd.sensor.Sensor;
+import com.vsu.wsd.sensor.SensorData;
 import com.vsu.wsd.sensor.SensorFactory;
-import com.vsu.wsd.sensor.SerialListener;
+import com.vsu.wsd.sensor.SensorListener;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
@@ -24,14 +20,9 @@ import org.codehaus.jettison.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.SortedMap;
 
 import static io.netty.handler.codec.http.HttpHeaders.Names.HOST;
 import static io.netty.handler.codec.http.HttpResponseStatus.BAD_REQUEST;
@@ -45,7 +36,6 @@ import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
  */
 public class HttpServerHandler extends SimpleChannelInboundHandler<Object> {
     private static final Logger logger = LoggerFactory.getLogger(HttpServerHandler.class);
-    private static final String WEBSOCKET_PATH = "/ws";
 
     private final Settings settings;
 
@@ -54,11 +44,6 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<Object> {
     private Sensor sensor;
     private int listenerId;
     private ChannelHandlerContext context;
-
-    private static List<Integer> temperatureSamples = new ArrayList<Integer>();
-    private static List<Integer> humiditySamples = new ArrayList<Integer>();
-
-    private static List<HistoryItem> sensorHistory = new ArrayList<HistoryItem>();
 
     public HttpServerHandler(final Settings settings) {
         this.settings = settings;
@@ -87,7 +72,7 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<Object> {
 
         final String uri = req.getUri();
 
-        if (uri.startsWith(WEBSOCKET_PATH)) {
+        if (uri.startsWith(Constants.WEBSOCKET_PATH)) {
             // Web socket handshake
             final WebSocketServerHandshakerFactory wsFactory = new WebSocketServerHandshakerFactory(
                     getWebSocketLocation(req), null, false);
@@ -102,7 +87,7 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<Object> {
 
             if (sensor == null) {
                 sensor = SensorFactory.get();
-                listenerId = sensor.addListener(new WsSerialListener());
+                listenerId = sensor.addListener(new WsSensorListener());
             }
 
         } else {
@@ -149,37 +134,39 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<Object> {
                                 sensor.getRFData(listenerId);
                             }
 
-                            if (field.equals(Constants.TYPE_SENSOR0)) {
+                            if (field.equals(Constants.TYPE_CHANNEL0)) {
                                 context = ctx;
-                                sensor.getSensorData(listenerId, 0);
+                                sensor.getChannelData(listenerId, 0);
                             }
 
-                            if (field.equals(Constants.TYPE_SENSOR1)) {
+                            if (field.equals(Constants.TYPE_CHANNEL1)) {
                                 context = ctx;
-                                sensor.getSensorData(listenerId, 1);
+                                sensor.getChannelData(listenerId, 1);
                             }
 
-                            if (field.equals(Constants.TYPE_SENSOR2)) {
+                            if (field.equals(Constants.TYPE_CHANNEL2)) {
                                 context = ctx;
-                                sensor.getSensorData(listenerId, 2);
+                                sensor.getChannelData(listenerId, 2);
                             }
 
-                            if (field.equals(Constants.TYPE_SENSOR3)) {
+                            if (field.equals(Constants.TYPE_CHANNEL3)) {
                                 context = ctx;
-                                sensor.getSensorData(listenerId, 3);
+                                sensor.getChannelData(listenerId, 3);
                             }
 
-                            if (field.equals(Constants.TYPE_SENSOR4)) {
+                            if (field.equals(Constants.TYPE_CHANNEL4)) {
                                 context = ctx;
-                                sensor.getSensorData(listenerId, 4);
+                                sensor.getChannelData(listenerId, 4);
                             }
 
                             if (field.equals(Constants.TYPE_HISTORY)) {
-                                final ByteBuf dataBytes = Unpooled.directBuffer(
-                                        sensorHistory.size() * ((Long.SIZE + Short.SIZE + Byte.SIZE) / Byte.SIZE));
+                                List<SensorData> sensorData = sensor.getSensorData();
 
-                                // byte order is big-endian
-                                for (HistoryItem item : sensorHistory) {
+                                final ByteBuf dataBytes = Unpooled.directBuffer(
+                                        sensorData.size() * ((Long.SIZE + Short.SIZE + Byte.SIZE) / Byte.SIZE));
+
+                                for (SensorData item : sensorData) {
+                                    // byte order is big-endian
                                     dataBytes.writeLong(item.getDateTime());
                                     dataBytes.writeShort(item.getTemperature());
                                     dataBytes.writeByte(item.getHumidity());
@@ -231,7 +218,7 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<Object> {
     }
 
     private String getWebSocketLocation(FullHttpRequest req) {
-        return "ws://" + req.headers().get(HOST) + WEBSOCKET_PATH;
+        return "ws://" + req.headers().get(HOST) + Constants.WEBSOCKET_PATH;
     }
 
     private void sendJsonResponse(final ChannelHandlerContext ctx, final Map<String, Object> map) {
@@ -251,196 +238,11 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<Object> {
         }
     }
 
-    /**
-     * Returns the majority value from a set of samples.
-     * @param samples  The sample set
-     * @return         The majority value or Integer.MIN_VALUE if none
-     */
-    public static int getMajorityValue(List<Integer> samples) {
-        int val = Integer.MIN_VALUE;
-
-        Map<Integer, Integer> map = new HashMap<Integer, Integer>();
-        for (int i : samples) {
-            Integer count = map.get(i);
-            map.put(i, count != null ? count + 1 : 0);
-        }
-
-        Map.Entry<Integer, Integer> majority = Collections.max(map.entrySet(),
-                new Comparator<Map.Entry<Integer, Integer>>() {
-                    @Override
-                    public int compare(Map.Entry<Integer, Integer> o1, Map.Entry<Integer, Integer> o2) {
-                        return o1.getValue().compareTo(o2.getValue());
-                    }
-                });
-
-        if (majority.getValue() >= 2) {
-            val = majority.getKey();
-        }
-
-        return val;
-    }
-
-    private class HistoryItem {
-        private long dateTime;
-        private short temperature;
-        private byte humidity;
-
-        public HistoryItem(long dateTime, short temperature, byte humidity) {
-            this.dateTime = dateTime;
-            this.temperature = temperature;
-            this.humidity = humidity;
-        }
-
-        public long getDateTime() {
-            return dateTime;
-        }
-
-        public short getTemperature() {
-            return temperature;
-        }
-
-        public byte getHumidity() {
-            return humidity;
-        }
-    }
-
-    private class WsSerialListener implements SerialListener {
-        public void onDataReceived(String data) {
-
-            //logger.info("received: " + data);
-
-            if (data.startsWith(Constants.RESP_ACK)) {
-                Map<String, Object> map = new HashMap<String, Object>();
-
-                map.put(Constants.KEY_RESULT, Constants.RESULT_OK);
-                map.put(Constants.KEY_DATETIME, System.currentTimeMillis());
-
-                // get the resource associated with the request code and send response
-                sendJsonResponse(context, map);
-
-            } else if (data.startsWith(Constants.RESP_NAK)) {
-                Map<String, Object> map = new HashMap<String, Object>();
-
-                map.put(Constants.KEY_RESULT, Constants.RESULT_ERROR);
-                map.put(Constants.KEY_DATETIME, System.currentTimeMillis());
-
-                // get the resource associated with the request code and send response
-                sendJsonResponse(context, map);
-
-            } else if (data.startsWith(Constants.RESP_RF)) {
-                // remove the packet header before parsing
-                RfData rfData = RfParser.parse(data.substring(3));
-
-                Map<String, Object> map = new HashMap<String, Object>();
-
-                if (rfData.temperature != Integer.MIN_VALUE) {
-                    map.put(Constants.TYPE_TEMPERATURE, rfData.temperature);
-                }
-
-                if (rfData.humidity != Integer.MIN_VALUE) {
-                    map.put(Constants.TYPE_HUMIDITY, rfData.humidity);
-                }
-
-                if (!map.isEmpty()) {
-                    map.put(Constants.KEY_RESULT, Constants.RESULT_OK);
-                } else {
-                    map.put(Constants.KEY_RESULT, Constants.RESULT_ERROR);
-                }
-
-                map.put(Constants.KEY_DATETIME, System.currentTimeMillis());
-                sendJsonResponse(context, map);
-
-            } else if (data.startsWith(Constants.RESP_RF_PUSH)) {
-                // remove the packet header before parsing
-                RfData rfData = RfParser.parse(data.substring(3));
-
-                if (rfData.sequence == RfData.SEQ_START) {
-                    temperatureSamples.clear();
-                    humiditySamples.clear();
-                }
-
-                if (rfData.temperature != Integer.MIN_VALUE) {
-                    temperatureSamples.add(rfData.temperature);
-                }
-
-                if (rfData.humidity != Integer.MIN_VALUE) {
-                    humiditySamples.add(rfData.humidity);
-                }
-
-                if (rfData.sequence == RfData.SEQ_END) {
-                    Map<String, Object> map = new HashMap<String, Object>();
-
-                    int validatedTemperature = getMajorityValue(temperatureSamples);
-
-                    if (validatedTemperature != Integer.MIN_VALUE) {
-                        map.put(Constants.TYPE_TEMPERATURE, validatedTemperature);
-                    }
-
-                    int validatedHumidity = getMajorityValue(humiditySamples);
-
-                    if (validatedHumidity != Integer.MIN_VALUE) {
-                        map.put(Constants.TYPE_HUMIDITY, validatedHumidity);
-                    }
-
-                    if (!map.isEmpty()) {
-                        long timeStamp = System.currentTimeMillis();
-
-                        map.put(Constants.KEY_RESULT, Constants.RESULT_OK);
-                        map.put(Constants.KEY_DATETIME, timeStamp);
-
-                        if (context != null) {
-                            sendJsonResponse(context, map);
-                        }
-
-                        sensorHistory.add(new HistoryItem(timeStamp, (short) validatedTemperature, (byte) validatedHumidity));
-
-                        // remove history older than one day
-                        final long oneDayAgo = timeStamp - 86400000;
-
-                        Predicate<HistoryItem> dayFilter = new Predicate<HistoryItem>() {
-                            public boolean apply(HistoryItem item) {
-                                return (item.getDateTime() >= oneDayAgo);
-                            }
-                        };
-
-                        sensorHistory = Lists.newArrayList(Iterables.filter(sensorHistory, dayFilter));
-                    }
-                }
-
-            } else if (data.startsWith(Constants.RESP_SENSOR)) {
-                if (data.length() >= 9) {
-                    Map<String, Object> map = new HashMap<String, Object>();
-
-                    map.put(Constants.KEY_RESULT, Constants.RESULT_OK);
-                    map.put(Constants.KEY_DATETIME, System.currentTimeMillis());
-
-                    int channel = Integer.parseInt(data.substring(3, 5), 16);
-                    int value = Integer.parseInt(data.substring(5, 9), 16);
-
-                    switch (channel) {
-                        case 0:
-                            map.put(Constants.TYPE_SENSOR0, value);
-                            break;
-
-                        case 1:
-                            map.put(Constants.TYPE_SENSOR1, value);
-                            break;
-
-                        case 2:
-                            map.put(Constants.TYPE_SENSOR2, value);
-                            break;
-
-                        case 3:
-                            map.put(Constants.TYPE_SENSOR3, value);
-                            break;
-
-                        case 4:
-                            map.put(Constants.TYPE_SENSOR4, value);
-                            break;
-                    }
-
-                    sendJsonResponse(context, map);
-                }
+    private class WsSensorListener implements SensorListener {
+        @Override
+        public void onResponseReceived(Map<String, Object> response) {
+            if (context != null) {
+                sendJsonResponse(context, response);
             }
         }
     }
