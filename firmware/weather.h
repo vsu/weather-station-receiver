@@ -51,11 +51,11 @@
 
 #define REQ_RESET               'R'
 #define REQ_RF                  'F'
-#define REQ_SENSOR              'S'
+#define REQ_CHANNEL             'C'
 
 #define RESP_RF_PUSH            'P'
 #define RESP_RF                 'F'
-#define RESP_SENSOR             'S'
+#define RESP_CHANNEL            'C'
 #define RESP_ACK                'K'
 #define RESP_NAK                'X'
 

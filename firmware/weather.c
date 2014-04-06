@@ -251,7 +251,7 @@ void process_usb (void)
       if (ch != 0xFF) 
       {
         id += ch;
-        fsm_state = (req == REQ_SENSOR) ? FSM_STATE_ARG1 : FSM_STATE_TERM;
+        fsm_state = (req == REQ_CHANNEL) ? FSM_STATE_ARG1 : FSM_STATE_TERM;
       } 
       else 
       {
@@ -301,7 +301,7 @@ void process_usb (void)
           send_usb (RESP_RF, id, data_buffer, DATA_BUFFER_SIZE);
           fsm_state = FSM_STATE_REQ;
         }
-        else if (req == REQ_SENSOR)
+        else if (req == REQ_CHANNEL)
         {
           if (arg < 5)
           {
@@ -313,7 +313,7 @@ void process_usb (void)
             data[1] = (uint8)(value >> 8);
             data[2] = (uint8)value;
 
-            send_usb (RESP_SENSOR, id, data, 3);
+            send_usb (RESP_CHANNEL, id, data, 3);
             fsm_state = FSM_STATE_REQ;
           }
           else
