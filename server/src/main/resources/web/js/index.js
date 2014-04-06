@@ -84,7 +84,7 @@ function _renderChart() {
             var humidity = [];
 
             _.chain(_historyData)
-                .sortBy(item[0])
+                .sortBy(function (item) { return item[0]; })
                 .each(function (item) {
                     var dateTime = moment(item[0]);
                     temperature.push({ x: dateTime.toDate(), y: _getTempF(item[1])});
