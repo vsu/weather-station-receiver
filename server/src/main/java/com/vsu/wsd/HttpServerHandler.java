@@ -9,6 +9,8 @@ import com.vsu.wsd.sensor.SensorFactory;
 import com.vsu.wsd.sensor.SensorListener;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
+import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.http.DefaultFullHttpResponse;
@@ -106,6 +108,8 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<Object> {
             handshaker.close(ctx.channel(), (CloseWebSocketFrame) frame.retain());
             sensor.removeListener(listenerId);
 
+            logger.debug("handleWebSocketFrame close: " + listenerId);
+
         } else if (frame instanceof PingWebSocketFrame) {
             ctx.channel().write(new PongWebSocketFrame(frame.content().retain()));
 
@@ -115,7 +119,7 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<Object> {
         } else if (frame instanceof TextWebSocketFrame) {
             final String request = ((TextWebSocketFrame) frame).text();
 
-            //logger.info("request: " + request);
+            logger.debug("handleWebSocketFrame text: " + request);
 
             try {
                 JSONObject requestJson = new JSONObject(request);
@@ -212,8 +216,7 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<Object> {
 
     @Override
     public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
-        //logger.info("exceptionCaught: ", cause);
-        //cause.printStackTrace();
+        //logger.debug("exceptionCaught: ", cause);
         ctx.close();
     }
 
@@ -221,7 +224,7 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<Object> {
         return "ws://" + req.headers().get(HOST) + Constants.WEBSOCKET_PATH;
     }
 
-    private void sendJsonResponse(final ChannelHandlerContext ctx, final Map<String, Object> map) {
+    private ChannelFuture sendJsonResponse(final ChannelHandlerContext ctx, final Map<String, Object> map) {
         try {
             JSONObject json = new JSONObject();
 
@@ -229,20 +232,32 @@ public class HttpServerHandler extends SimpleChannelInboundHandler<Object> {
                 json.put(item.getKey(), item.getValue());
             }
 
-            //logger.info("write: " + json.toString());
+            logger.debug("sendJsonResponse: " + json.toString());
 
-            ctx.channel().writeAndFlush(new TextWebSocketFrame(json.toString()));
+            return ctx.channel().writeAndFlush(new TextWebSocketFrame(json.toString()));
 
         } catch (JSONException e) {
-
         }
+
+        return null;
     }
 
     private class WsSensorListener implements SensorListener {
         @Override
-        public void onResponseReceived(Map<String, Object> response) {
+        public void onResponseReceived(final int listenerId, Map<String, Object> response) {
             if (context != null) {
-                sendJsonResponse(context, response);
+                sendJsonResponse(context, response).addListener(new ChannelFutureListener() {
+                    @Override
+                    public void operationComplete(ChannelFuture channelFuture) throws Exception {
+                        logger.debug("operationComplete: " + channelFuture.isSuccess());
+
+                        // if the operation fails, the client has probably disconnected, so
+                        // remove the listener
+                        if (!channelFuture.isSuccess()) {
+                            sensor.removeListener(listenerId);
+                        }
+                    }
+                });
             }
         }
     }

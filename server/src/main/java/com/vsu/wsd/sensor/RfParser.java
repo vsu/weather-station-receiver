@@ -76,7 +76,7 @@ public class RfParser {
 
         String bitStr = builder.toString();
 
-        //logger.info(bitStr);
+        //logger.debug("bitStr: " + bitStr);
 
         if (bitStr.length() >= PREAMBLE.length() + UID_LEN + SEQ_LEN + TEMP_LEN + HUMIDITY_LEN) {
             // locate the preamble

@@ -258,7 +258,6 @@ function _connectWebSocket(onOpen) {
     };
 }
 
-
 $(document).ready(function () {
     _connectWebSocket(function () {
         _sendQuery(TYPE.temperature);
@@ -283,4 +282,9 @@ $(document).ready(function () {
             _socket.push(JSON.stringify(data));
         }
     });
+
+    window.onbeforeunload = function() {
+        _socket.onclose = function () {}; // disable onclose handler first
+        _socket.close();
+    };
 });

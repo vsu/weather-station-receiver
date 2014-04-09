@@ -54,7 +54,7 @@ public class Sensor {
             try {
                 reader.join();
             } catch(InterruptedException e) {
-                logger.info("close: " + e.getMessage());
+                logger.debug("close: " + e.getMessage());
             }
 
             reader = null;
@@ -198,12 +198,12 @@ public class Sensor {
                                         if (listeners.size() > 0) {
                                             // packet id 0 indicates broadcast
                                             if (id == 0) {
-                                                for (SensorListener listener : listeners.values()) {
-                                                    listener.onResponseReceived(map);
+                                                for (Map.Entry<Integer, SensorListener> listener: listeners.entrySet()) {
+                                                    listener.getValue().onResponseReceived(listener.getKey(), map);
                                                 }
                                             } else {
                                                 if (listeners.containsKey(id)) {
-                                                    listeners.get(id).onResponseReceived(map);
+                                                    listeners.get(id).onResponseReceived(id, map);
                                                 }
                                             }
                                         }
@@ -247,7 +247,7 @@ public class Sensor {
     }
 
     private Map<String, Object> processReceivedData(String data) {
-        //logger.info("received: " + data);
+        logger.debug("processReceivedData: " + data);
 
         Map<String, Object> map = new HashMap<String, Object>();
 
@@ -334,7 +334,7 @@ public class Sensor {
 
                     sensorData = Lists.newArrayList(Iterables.filter(sensorData, dayFilter));
 
-                    System.out.println("len: " + sensorData.size());
+                    logger.debug("sensorData len: " + sensorData.size());
 
                     return map;
                }
